@@ -3,11 +3,7 @@ import { supabase } from './supabase';
 import type { Task, NewTask, UserProfile, RepeatOption } from './types';
 import { scheduleTaskNotification } from './notifications';
 import { format } from 'date-fns';
-import {
-  eachDateStringInMonth,
-  taskOccursOnVisibleDate,
-  projectTaskToOccurrence,
-} from './recurrence';
+import { taskOccursOnVisibleDate, projectTaskToOccurrence } from './recurrence';
 
 function normalizeTaskRow(row: Task): Task {
   const repeat: RepeatOption =
@@ -39,7 +35,8 @@ interface TaskStore {
   /** Append one yyyy-MM-dd to deleted_dates (recurring tasks only). */
   deleteTaskOccurrence: (id: string, dateStr: string) => Promise<void>;
   getTasksForDate: (date: string) => Task[];
-  getMarkedDates: () => Record<string, { dots: { color: string }[] }>;
+  getMarkedDates: () =>
+    Record<string, { dots?: { color: string }[]; selected?: boolean; selectedColor?: string }>;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -51,8 +48,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
   setUser: (user) => set({ user }),
 
-  setSelectedDate: (date) =>
-    set({ selectedDate: date, calendarMonthKey: date.slice(0, 7) }),
+  setSelectedDate: (date) => set({ selectedDate: date }),
 
   setCalendarMonthKey: (monthKey) => set({ calendarMonthKey: monthKey }),
 
@@ -145,28 +141,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   getMarkedDates: () => {
-    const { tasks, selectedDate, calendarMonthKey } = get();
-    const marks: Record<string, { dots: { color: string }[]; selected?: boolean; selectedColor?: string }> = {};
-
-    tasks.forEach((task) => {
-      for (const dateStr of eachDateStringInMonth(calendarMonthKey)) {
-        if (!taskOccursOnVisibleDate(task, dateStr)) continue;
-
-        if (!marks[dateStr]) {
-          marks[dateStr] = { dots: [] };
-        }
-        if (marks[dateStr].dots.length < 3) {
-          marks[dateStr].dots.push({ color: task.color });
-        }
-      }
-    });
-
-    marks[selectedDate] = {
-      ...(marks[selectedDate] ?? { dots: [] }),
-      selected: true,
-      selectedColor: '#4A6FE3',
+    const { selectedDate } = get();
+    return {
+      [selectedDate]: {
+        selected: true,
+      },
     };
-
-    return marks;
   },
 }));

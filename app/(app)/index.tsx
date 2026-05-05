@@ -1,206 +1,170 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Platform,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
+  Text,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
+import { format, parse, addMonths } from 'date-fns';
+import { formatLocalized } from '@/lib/i18n/dates';
 import { useTaskStore } from '@/lib/store';
 import type { Task } from '@/lib/types';
-import EventCard from '@/components/EventCard';
 import RecurringDeleteSheet from '@/components/RecurringDeleteSheet';
+import CalendarFullDay from '@/components/CalendarFullDay';
+import DayTasksSheet from '@/components/DayTasksSheet';
+import DrawerMenu from '@/components/DrawerMenu';
 import { t } from '@/lib/i18n';
-import { formatLocalized } from '@/lib/i18n/dates';
 import { useAppTheme } from '@/lib/theme';
 import type { AppThemeColors } from '@/lib/theme';
+import {
+  eachDateStringInMonth,
+  taskOccursOnVisibleDate,
+  projectTaskToOccurrence,
+} from '@/lib/recurrence';
+import { TasksByDateContext } from '@/lib/TasksByDateContext';
 
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return t('home.greetingMorning');
-  if (hour < 18) return t('home.greetingAfternoon');
-  return t('home.greetingEvening');
-}
-
-function createHomeStyles(c: AppThemeColors) {
+function createStyles(c: AppThemeColors, bottomInset: number, isDark: boolean) {
   return StyleSheet.create({
-    safe: {
-      flex: 1,
-      backgroundColor: c.bg,
-    },
-    scroll: {
-      flex: 1,
-    },
-    scrollContent: {
-      paddingHorizontal: 20,
-      paddingBottom: 100,
-    },
-    topBar: {
+    safe: { flex: 1, backgroundColor: c.bg },
+    toolbar: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 12,
-    },
-    iconBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: c.surfaceElevated,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: c.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 2,
-    },
-    greeting: {
-      fontSize: 16,
-      color: c.textSecondary,
-      marginTop: 8,
-    },
-    name: {
-      fontSize: 28,
-      fontWeight: '700',
-      color: c.textPrimary,
-      letterSpacing: -0.5,
-      marginBottom: 20,
-    },
-    calendarCard: {
-      backgroundColor: c.surfaceElevated,
-      borderRadius: 20,
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      marginBottom: 16,
-      shadowColor: c.shadow,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      elevation: 3,
-    },
-    calendarInner: {
-      overflow: 'hidden',
-      paddingVertical: 4,
-    },
-    eventsHeader: {
-      marginBottom: 12,
-    },
-    eventsTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: c.textPrimary,
-    },
-    eventsDate: {
-      fontSize: 13,
-      color: c.textSecondary,
-      marginTop: 2,
-    },
-    emptyState: {
-      alignItems: 'center',
-      paddingVertical: 40,
-    },
-    emptyText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: c.textSecondary,
-      marginTop: 12,
-    },
-    emptySubtext: {
-      fontSize: 13,
-      color: c.textTertiary,
-      marginTop: 4,
-    },
-    tasksList: {
+      paddingHorizontal: 8,
+      paddingTop: 8,
+      paddingBottom: 8,
       gap: 2,
     },
+    monthTitle: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: c.textPrimary,
+      marginLeft: 4,
+    },
+    iconBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    spacer: { flex: 1 },
+    calendarWrap: { flex: 1 },
     fab: {
       position: 'absolute',
-      end: 24,
-      bottom: 32,
-      width: 60,
-      height: 60,
-      borderRadius: 30,
+      end: 20,
+      bottom: Math.max(bottomInset, 16) + 48,
+      width: 56,
+      height: 56,
+      borderRadius: 16,
       backgroundColor: c.accent,
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: c.accent,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.4,
-      shadowRadius: 12,
-      elevation: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.42 : 0.22,
+      shadowRadius: 6,
+      elevation: 6,
     },
   });
 }
 
 export default function HomeScreen() {
   const { colors, resolvedScheme } = useAppTheme();
-  const styles = useMemo(() => createHomeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const isDarkMode = resolvedScheme === 'dark';
+  const styles = useMemo(() => createStyles(colors, insets.bottom, isDarkMode), [colors, insets.bottom, isDarkMode]);
 
   const [recurringDeleteTask, setRecurringDeleteTask] = useState<Task | null>(null);
+  const [sheetDate, setSheetDate] = useState<string | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [calH, setCalH] = useState(0);
 
   const calendarTheme = useMemo(
     () => ({
       backgroundColor: 'transparent' as const,
       calendarBackground: 'transparent' as const,
       textSectionTitleColor: colors.calendar.section,
-      selectedDayBackgroundColor: colors.accent,
-      selectedDayTextColor: colors.calendar.selectedText,
+      selectedDayBackgroundColor: 'transparent' as const,
+      selectedDayTextColor: colors.calendar.day,
       todayTextColor: colors.calendar.today,
       dayTextColor: colors.calendar.day,
       textDisabledColor: colors.calendar.dayDisabled,
       textInactiveColor: colors.textTertiary,
-      dotColor: colors.accent,
-      selectedDotColor: colors.calendar.selectedText,
       arrowColor: colors.calendar.arrow,
       monthTextColor: colors.calendar.month,
-      textDayFontWeight: '500' as const,
-      textMonthFontWeight: '700' as const,
-      textDayHeaderFontWeight: '600' as const,
-      textDayFontSize: 18,
-      textMonthFontSize: 21,
-      textDayHeaderFontSize: 14,
-      weekVerticalMargin: 10,
-      arrowHeight: 30,
-      arrowWidth: 30,
-      // Only override base/today/selected here — a `text` key would replace the library's
-      // full `text` style and drop font/color. Alignment tweaks go in `textDayStyle`.
-      'stylesheet.day.basic': {
-        base: {
-          width: 40,
-          // Tall cell + flex-start + text marginTop left empty space below the dots, so the
-          // selected fill looked shifted down; center the number+dot stack vertically.
-          height: 40,
-          alignItems: 'center',
-          justifyContent: 'center',
+      textMonthFontWeight: '400' as const,
+      textDayHeaderFontWeight: '500' as const,
+      textMonthFontSize: isDarkMode ? 22 : 20,
+      textDayHeaderFontSize: 11,
+      arrowHeight: 28,
+      arrowWidth: 28,
+      'stylesheet.calendar.main': {
+        monthView: { flex: 1, backgroundColor: 'transparent' },
+        week: {
+          flex: 1,
+          flexDirection: 'row' as const,
+          justifyContent: 'space-around' as const,
+          marginVertical: 0,
         },
-        selected: {
-          borderRadius: 20,
+      },
+      'stylesheet.calendar.header': {
+        header: {
+          flexDirection: 'row' as const,
+          justifyContent: 'space-between' as const,
+          paddingHorizontal: isDarkMode ? 4 : 14,
+          marginTop: isDarkMode ? 4 : 18,
+          paddingTop: 2,
+          alignItems: 'center' as const,
         },
-        today: {
-          borderRadius: 20,
+        monthText: {
+          fontSize: isDarkMode ? 22 : 20,
+          fontWeight: '400' as const,
+          color: colors.calendar.month,
+          marginVertical: 6,
+          marginHorizontal: 4,
+          letterSpacing: 0,
+        },
+        arrow: {
+          paddingVertical: 8,
+          paddingHorizontal: 8,
+          minWidth: 48,
+          minHeight: 48,
+          justifyContent: 'center' as const,
+          alignItems: 'center' as const,
+        },
+        arrowImage: { tintColor: colors.calendar.arrow },
+        dayHeader: {
+          flex: 1,
+          textAlign: 'center' as const,
+          fontSize: 11,
+          fontWeight: '500' as const,
+          color: colors.calendar.section,
+          marginTop: 8,
+          marginBottom: 4,
+        },
+        week: {
+          marginTop: 0,
+          flexDirection: 'row' as const,
+          justifyContent: 'space-around' as const,
         },
       },
       textDayStyle: {
-        color: colors.calendar.day,
-        textAlign: 'center' as const,
-        // Library default pushes the glyph down; keep the stack centered in `base`.
-        marginTop: 0,
         ...(Platform.OS === 'android' ? { includeFontPadding: false as const } : {}),
       },
     }),
-    [colors]
+    [colors, isDarkMode]
   );
 
   const router = useRouter();
   const {
-    user,
+    tasks,
     selectedDate,
     calendarMonthKey,
     loading,
@@ -213,11 +177,22 @@ export default function HomeScreen() {
     getMarkedDates,
   } = useTaskStore();
 
-  const tasksForDay = getTasksForDate(selectedDate);
+  // Compute tasks for every day in the current visible month.
+  // Passed via Context → cells always update when tasks change, bypassing React.memo in the library.
+  const tasksByDate = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    for (const dateStr of eachDateStringInMonth(calendarMonthKey)) {
+      const dayTasks = tasks
+        .filter((task) => taskOccursOnVisibleDate(task, dateStr))
+        .map((task) => projectTaskToOccurrence(task, dateStr))
+        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
+      if (dayTasks.length > 0) map[dateStr] = dayTasks;
+    }
+    return map;
+  }, [tasks, calendarMonthKey]);
+
   const markedDates = getMarkedDates();
-  const displayDate = formatLocalized(new Date(`${selectedDate}T12:00:00`), 'EEEE, d MMMM yyyy');
-  const firstName =
-    user?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? t('common.there');
+  const sheetTasks = sheetDate ? getTasksForDate(sheetDate) : [];
 
   const handleDeleteTask = useCallback(
     (task: Task) => {
@@ -227,93 +202,161 @@ export default function HomeScreen() {
       }
       Alert.alert(t('home.deleteTask'), t('home.deleteConfirm', { title: task.title }), [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.delete'), style: 'destructive', onPress: () => void deleteTask(task.id) },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => void deleteTask(task.id),
+        },
       ]);
     },
-    [deleteTask, t]
+    [deleteTask]
   );
 
+  const goToToday = useCallback(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayMonth = today.slice(0, 7);
+    setSelectedDate(today);
+    if (todayMonth !== calendarMonthKey) {
+      setCalendarMonthKey(todayMonth);
+    }
+  }, [calendarMonthKey, setSelectedDate, setCalendarMonthKey]);
+
+  const onDayPress = useCallback(
+    (day: { dateString: string }) => {
+      setSelectedDate(day.dateString);
+      setSheetDate(day.dateString);
+    },
+    [setSelectedDate]
+  );
+
+  const displayMonthYear = useMemo(() => {
+    try {
+      const base = parse(`${calendarMonthKey}-01`, 'yyyy-MM-dd', new Date());
+      return formatLocalized(base, 'MMMM yyyy');
+    } catch {
+      return calendarMonthKey;
+    }
+  }, [calendarMonthKey]);
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchTasks} tintColor={colors.refreshTint} />
-        }
-      >
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(app)/settings')}>
-            <Ionicons name="menu" size={24} color={colors.icon} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(app)/search')}>
-            <Ionicons name="search-outline" size={22} color={colors.icon} />
-          </TouchableOpacity>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      {/* ── Toolbar ── */}
+      <View style={styles.toolbar}>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => setIsDrawerOpen(true)}
+          accessibilityRole="button"
+        >
+          <Ionicons name="menu" size={22} color={colors.icon} />
+        </TouchableOpacity>
+
+        <Text style={styles.monthTitle}>{displayMonthYear}</Text>
+
+        <View style={styles.spacer} />
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => void fetchTasks()}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel={t('home.refreshAria')}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.activityIndicator} />
+          ) : (
+            <Ionicons name="refresh-outline" size={20} color={colors.icon} />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => router.push('/(app)/search')}
+          accessibilityRole="button"
+        >
+          <Ionicons name="search-outline" size={20} color={colors.icon} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={goToToday}
+          accessibilityRole="button"
+          accessibilityLabel={t('home.todayAria')}
+        >
+          <Ionicons name="calendar-outline" size={20} color={colors.icon} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Full-month calendar ── */}
+      <TasksByDateContext.Provider value={tasksByDate}>
+        <View
+          style={styles.calendarWrap}
+          onLayout={(e) => setCalH(e.nativeEvent.layout.height)}
+        >
+          {calH > 0 && (
+            <Calendar
+              key={resolvedScheme}
+              firstDay={0}
+              initialDate={`${calendarMonthKey}-01`}
+              onDayPress={onDayPress}
+              onMonthChange={(month: { dateString: string }) => {
+                setCalendarMonthKey(month.dateString.slice(0, 7));
+              }}
+              markedDates={markedDates}
+              markingType="custom"
+              enableSwipeMonths
+              showSixWeeks
+              dayComponent={CalendarFullDay}
+              style={{ height: calH }}
+              theme={calendarTheme}
+              hideArrows={true}
+              renderHeader={() => <View />}
+            />
+          )}
         </View>
+      </TasksByDateContext.Provider>
 
-        <Text style={styles.greeting}>{getGreeting()},</Text>
-        <Text style={styles.name}>{firstName}</Text>
-
-        <View style={styles.calendarCard}>
-          <Calendar
-            key={resolvedScheme}
-            firstDay={0}
-            current={`${calendarMonthKey}-01`}
-            onDayPress={(day: { dateString: string }) => setSelectedDate(day.dateString)}
-            onMonthChange={(month: { dateString: string }) => {
-              setCalendarMonthKey(month.dateString.slice(0, 7));
-            }}
-            markedDates={markedDates}
-            markingType="multi-dot"
-            style={styles.calendarInner}
-            theme={calendarTheme}
-          />
-        </View>
-
-        <View style={styles.eventsHeader}>
-          <Text style={styles.eventsTitle}>{t('home.events')}</Text>
-          <Text style={styles.eventsDate}>{displayDate}</Text>
-        </View>
-
-        {tasksForDay.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>{t('home.emptyTitle')}</Text>
-            <Text style={styles.emptySubtext}>{t('home.emptySub')}</Text>
-          </View>
-        ) : (
-          <View style={styles.tasksList}>
-            {tasksForDay.map((task) => (
-              <EventCard
-                key={`${task.id}:${selectedDate}`}
-                task={task}
-                onPress={() => router.push({ pathname: '/(app)/create', params: { taskId: task.id } })}
-                onDelete={() => handleDeleteTask(task)}
-              />
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
+      {/* ── FAB ── */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/(app)/create')}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
+        accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color={colors.onAccent} />
       </TouchableOpacity>
 
+      {/* ── Day sheet ── */}
+      <DayTasksSheet
+        visible={sheetDate !== null}
+        dateString={sheetDate}
+        tasks={sheetTasks}
+        onClose={() => setSheetDate(null)}
+        onEditTask={(task) =>
+          router.push({ pathname: '/(app)/create', params: { taskId: task.id } })
+        }
+        onDeleteTask={handleDeleteTask}
+      />
+
+      {/* ── Recurring delete sheet ── */}
       <RecurringDeleteSheet
         visible={recurringDeleteTask !== null}
         taskTitle={recurringDeleteTask?.title ?? ''}
         onClose={() => setRecurringDeleteTask(null)}
         onDeleteOccurrence={() => {
-          if (recurringDeleteTask) void deleteTaskOccurrence(recurringDeleteTask.id, selectedDate);
+          if (recurringDeleteTask) {
+            const d = sheetDate ?? selectedDate;
+            void deleteTaskOccurrence(recurringDeleteTask.id, d);
+          }
         }}
         onDeleteSeries={() => {
           if (recurringDeleteTask) void deleteTask(recurringDeleteTask.id);
         }}
+      />
+      
+      <DrawerMenu 
+        visible={isDrawerOpen} 
+        onClose={() => setIsDrawerOpen(false)} 
+        onRefresh={() => void fetchTasks()} 
       />
     </SafeAreaView>
   );

@@ -29,6 +29,11 @@ export const he = {
     deleteOccurrenceOnlySub: 'שאר התאריכים לא יושפעו',
     deleteEntireSeries: 'את כל המטלה החוזרת',
     deleteEntireSeriesSub: 'מסיר את כל התאריכים, עבר ועתיד',
+    moreTasksPill: '+%{count}',
+    daySheetEmptyTitle: 'אין משימות ביום הזה',
+    daySheetEmptySub: 'לחץ + כדי להוסיף משימה',
+    todayAria: 'מעבר להיום',
+    refreshAria: 'רענון משימות',
   },
   search: {
     placeholder: 'חיפוש משימות…',

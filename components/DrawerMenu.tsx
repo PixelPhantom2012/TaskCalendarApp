@@ -1,0 +1,220 @@
+import React, { useMemo } from 'react';
+import {
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ScrollView,
+  Pressable,
+  Image,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useTaskStore } from '@/lib/store';
+import { useAppTheme } from '@/lib/theme';
+import type { AppThemeColors } from '@/lib/theme';
+import { t } from '@/lib/i18n';
+
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+};
+
+function createStyles(c: AppThemeColors) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      flexDirection: 'row',
+    },
+    drawer: {
+      width: 300,
+      backgroundColor: c.bg,
+      height: '100%',
+    },
+    header: {
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.borderMuted,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: '500',
+      color: c.textPrimary,
+    },
+    section: {
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.borderMuted,
+    },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+    },
+    itemActive: {
+      backgroundColor: c.accent + '1A', // Light accent background for active item
+      borderTopRightRadius: 24,
+      borderBottomRightRadius: 24,
+      marginRight: 8,
+    },
+    icon: {
+      width: 24,
+      textAlign: 'center',
+      marginRight: 16,
+    },
+    itemText: {
+      fontSize: 16,
+      color: c.textPrimary,
+      fontWeight: '500',
+    },
+    itemTextActive: {
+      color: c.accent,
+      fontWeight: '600',
+    },
+    accountSection: {
+      paddingVertical: 12,
+    },
+    accountHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+    },
+    accountAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: c.surfaceElevated,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    accountEmail: {
+      fontSize: 14,
+      color: c.textPrimary,
+      fontWeight: '500',
+    },
+    accountName: {
+      fontSize: 12,
+      color: c.textSecondary,
+    },
+    checkboxItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      paddingLeft: 64, // Indent to align with account text
+    },
+    checkbox: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 16,
+    },
+    checkboxLabel: {
+      fontSize: 14,
+      color: c.textPrimary,
+      fontWeight: '400',
+    },
+  });
+}
+
+export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
+  const { colors } = useAppTheme();
+  const { user } = useTaskStore();
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        {/* Drawer Content */}
+        <View style={[styles.drawer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{t('auth.appName')}</Text>
+          </View>
+          
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.section}>
+              <TouchableOpacity style={styles.item} onPress={onClose}>
+                <Ionicons name="list" size={24} color={colors.iconMuted} style={styles.icon} />
+                <Text style={styles.itemText}>Schedule</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.item} onPress={onClose}>
+                <Ionicons name="calendar-outline" size={24} color={colors.iconMuted} style={styles.icon} />
+                <Text style={styles.itemText}>Day</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.item} onPress={onClose}>
+                <Ionicons name="calendar-clear-outline" size={24} color={colors.iconMuted} style={styles.icon} />
+                <Text style={styles.itemText}>3 days</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.item} onPress={onClose}>
+                <Ionicons name="apps-outline" size={24} color={colors.iconMuted} style={styles.icon} />
+                <Text style={styles.itemText}>Week</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.item, styles.itemActive]} onPress={onClose}>
+                <Ionicons name="grid" size={24} color={colors.accent} style={styles.icon} />
+                <Text style={[styles.itemText, styles.itemTextActive]}>Month</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <TouchableOpacity 
+                style={styles.item} 
+                onPress={() => {
+                  onRefresh();
+                  onClose();
+                }}
+              >
+                <Ionicons name="refresh" size={24} color={colors.iconMuted} style={styles.icon} />
+                <Text style={styles.itemText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.accountSection}>
+              <View style={styles.accountHeader}>
+                {user?.avatar_url ? (
+                  <Image source={{ uri: user.avatar_url }} style={styles.accountAvatar} />
+                ) : (
+                  <View style={styles.accountAvatar}>
+                    <Ionicons name="person" size={16} color={colors.iconMuted} />
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.accountEmail}>{user?.email || 'User'}</Text>
+                  <Text style={styles.accountName}>Google</Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity style={styles.checkboxItem} onPress={onClose}>
+                <View style={[styles.checkbox, { backgroundColor: '#4285F4' }]}>
+                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                </View>
+                <Text style={styles.checkboxLabel}>My calendar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.checkboxItem} onPress={onClose}>
+                <View style={[styles.checkbox, { backgroundColor: '#8AB4F8' }]}>
+                  <Ionicons name="checkmark" size={14} color="#FFF" />
+                </View>
+                <Text style={styles.checkboxLabel}>Tasks</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+        
+        {/* Click-away overlay */}
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+      </View>
+    </Modal>
+  );
+}

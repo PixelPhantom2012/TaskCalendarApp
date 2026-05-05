@@ -28,6 +28,11 @@ export const en = {
     deleteOccurrenceOnlySub: 'Other dates stay untouched',
     deleteEntireSeries: 'Entire series',
     deleteEntireSeriesSub: 'Removes all past and future dates',
+    moreTasksPill: '+%{count}',
+    daySheetEmptyTitle: 'Nothing scheduled',
+    daySheetEmptySub: 'Tap + to add a task for this day',
+    todayAria: 'Go to today',
+    refreshAria: 'Refresh tasks',
   },
   search: {
     placeholder: 'Search tasks…',
