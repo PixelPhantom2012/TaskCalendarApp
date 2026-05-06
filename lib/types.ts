@@ -1,4 +1,7 @@
-export type RepeatOption = 'none' | 'daily' | 'weekly' | 'monthly';
+/** The three calendar item types the app supports. */
+export type CalendarItemKind = 'task' | 'event' | 'birthday';
+
+export type RepeatOption = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 export type TaskColor =
   | '#4A6FE3'
@@ -24,6 +27,10 @@ export interface Task {
   /** yyyy-MM-dd calendar keys skipped for recurring series (soft-delete one occurrence). */
   deleted_dates: string[];
   created_at: string;
+  /** Item type: task, event, or birthday. Defaults to 'task' for legacy rows. */
+  kind: CalendarItemKind;
+  /** Optional birth year (birthdays only); used for age display. null = not set. */
+  birth_year: number | null;
 }
 
 export type NewTask = Omit<Task, 'id' | 'user_id' | 'created_at'>;

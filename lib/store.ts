@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Task, NewTask, UserProfile, RepeatOption } from './types';
-import { scheduleTaskNotification } from './notifications';
+import type { Task, NewTask, UserProfile, RepeatOption, CalendarItemKind } from './types';
+import { cancelScheduledNotificationsForTask, rescheduleAllNotificationsForTasks, scheduleTaskNotification } from './notifications';
 import { format } from 'date-fns';
 import { taskOccursOnVisibleDate, projectTaskToOccurrence } from './recurrence';
 
@@ -10,11 +10,15 @@ function normalizeTaskRow(row: Task): Task {
     row.repeat === 'daily' ||
     row.repeat === 'weekly' ||
     row.repeat === 'monthly' ||
+    row.repeat === 'yearly' ||
     row.repeat === 'none'
       ? row.repeat
       : 'none';
   const deleted_dates = Array.isArray(row.deleted_dates) ? row.deleted_dates : [];
-  return { ...row, repeat, deleted_dates };
+  const kind: CalendarItemKind =
+    row.kind === 'event' || row.kind === 'birthday' ? row.kind : 'task';
+  const birth_year = typeof row.birth_year === 'number' ? row.birth_year : null;
+  return { ...row, repeat, deleted_dates, kind, birth_year };
 }
 
 interface TaskStore {
@@ -60,7 +64,9 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       .order('start_at', { ascending: true });
 
     if (!error && data) {
-      set({ tasks: (data as Task[]).map(normalizeTaskRow) });
+      const tasks = (data as Task[]).map(normalizeTaskRow);
+      set({ tasks });
+      await rescheduleAllNotificationsForTasks(tasks);
     }
     set({ loading: false });
   },
@@ -69,15 +75,27 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({
-        ...taskData,
-        user_id: user.id,
-        deleted_dates: taskData.deleted_dates ?? [],
-      })
-      .select()
-      .single();
+    const payload = {
+      ...taskData,
+      user_id: user.id,
+      deleted_dates: taskData.deleted_dates ?? [],
+    };
+
+    let { data, error } = await supabase.from('tasks').insert(payload).select().single();
+
+    // Graceful fallback: if kind/birth_year columns don't exist yet (migration not run),
+    // retry without them so the item still saves.
+    if (error) {
+      const { kind, birth_year, ...legacyPayload } = payload;
+      const result = await supabase.from('tasks').insert(legacyPayload).select().single();
+      data = result.data;
+      error = result.error;
+      // Merge the kind/birth_year back so local state is correct
+      if (!error && data) {
+        (data as Task).kind = kind;
+        (data as Task).birth_year = birth_year;
+      }
+    }
 
     if (!error && data) {
       const task = normalizeTaskRow(data as Task);
@@ -87,12 +105,24 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   updateTask: async (id, updates) => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('tasks')
       .update(updates)
       .eq('id', id)
       .select()
       .single();
+
+    // Same fallback: if new columns don't exist yet, retry without them
+    if (error) {
+      const { kind, birth_year, ...legacyUpdates } = updates as Partial<NewTask> & { kind?: CalendarItemKind; birth_year?: number | null };
+      const result = await supabase.from('tasks').update(legacyUpdates).eq('id', id).select().single();
+      data = result.data;
+      error = result.error;
+      if (!error && data) {
+        if (kind !== undefined) (data as Task).kind = kind;
+        if (birth_year !== undefined) (data as Task).birth_year = birth_year;
+      }
+    }
 
     if (!error && data) {
       const updated = normalizeTaskRow(data as Task);
@@ -106,6 +136,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   deleteTask: async (id) => {
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (!error) {
+      await cancelScheduledNotificationsForTask(id);
       set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) }));
     }
   },

@@ -50,6 +50,18 @@ export function taskOccursOn(task: Task, dateStr: string): boolean {
       const expectedDay = Math.min(anchorDom, dim);
       return target.getDate() === expectedDay;
     }
+    case 'yearly': {
+      const aMonth = anchor.getMonth();
+      const aDay = anchor.getDate();
+      const tMonth = target.getMonth();
+      const tDay = target.getDate();
+      // Feb-29 anchor on a non-leap target year → show on Feb 28 instead
+      const isLeap = (y: number) => y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+      if (aMonth === 1 && aDay === 29 && !isLeap(target.getFullYear())) {
+        return tMonth === 1 && tDay === 28;
+      }
+      return tMonth === aMonth && tDay === aDay;
+    }
     default:
       return false;
   }

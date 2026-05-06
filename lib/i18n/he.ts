@@ -64,6 +64,7 @@ export const he = {
     daily: 'יומי',
     weekly: 'שבועי',
     monthly: 'חודשי',
+    yearly: 'שנתי',
     notifyAt: 'בשעת האירוע',
     notify5: '5 דק׳ לפני',
     notify10: '10 דק׳ לפני',
@@ -141,8 +142,26 @@ export const he = {
     themeDark: 'כהה',
     themeSystem: 'לפי המערכת',
   },
+  notifications: {
+    reminderBodyDay: 'מתחיל בעוד יום',
+    reminderBodyMinutes: 'מתחיל בעוד %{count} דקות',
+  },
   eventCard: {
     allDay: 'כל היום',
+  },
+  create: {
+    kindTask: 'משימה',
+    kindEvent: 'אירוע',
+    kindBirthday: 'יום הולדת',
+    newTask: 'משימה חדשה',
+    editTask: 'עריכת משימה',
+    newEvent: 'אירוע חדש',
+    editEvent: 'עריכת אירוע',
+    newBirthday: 'יום הולדת חדש',
+    editBirthday: 'עריכת יום הולדת',
+    birthYear: 'שנת לידה',
+    birthYearPlaceholder: 'לדוג׳ 1990',
+    birthdayHint: 'חוזר כל שנה אוטומטית.',
   },
 };
 

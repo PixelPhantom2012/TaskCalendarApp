@@ -63,6 +63,7 @@ export const en = {
     daily: 'Daily',
     weekly: 'Weekly',
     monthly: 'Monthly',
+    yearly: 'Yearly',
     notifyAt: 'At time of event',
     notify5: '5 minutes before',
     notify10: '10 minutes before',
@@ -139,7 +140,25 @@ export const en = {
     themeDark: 'Dark',
     themeSystem: 'System',
   },
+  notifications: {
+    reminderBodyDay: 'Starts in 1 day',
+    reminderBodyMinutes: 'Starts in %{count} minutes',
+  },
   eventCard: {
     allDay: 'All day',
+  },
+  create: {
+    kindTask: 'Task',
+    kindEvent: 'Event',
+    kindBirthday: 'Birthday',
+    newTask: 'New Task',
+    editTask: 'Edit Task',
+    newEvent: 'New Event',
+    editEvent: 'Edit Event',
+    newBirthday: 'New Birthday',
+    editBirthday: 'Edit Birthday',
+    birthYear: 'Birth Year',
+    birthYearPlaceholder: 'e.g. 1990',
+    birthdayHint: 'Repeats every year automatically.',
   },
 };

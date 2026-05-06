@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, addHours, startOfDay } from 'date-fns';
 import { getDateFnsLocale } from '@/lib/i18n/dates';
 import { useTaskStore } from '@/lib/store';
-import type { RepeatOption, TaskColor, NewTask } from '@/lib/types';
+import type { RepeatOption, TaskColor, NewTask, CalendarItemKind } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { useAppTheme } from '@/lib/theme';
 import { createTaskMainStyles, createTaskModalStyles } from '@/lib/theme/createTaskStyles';
@@ -109,6 +109,24 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose, mod
   );
 }
 
+const KIND_OPTIONS: { kind: CalendarItemKind; icon: string }[] = [
+  { kind: 'task', icon: 'checkmark-circle-outline' },
+  { kind: 'event', icon: 'calendar-outline' },
+  { kind: 'birthday', icon: 'gift-outline' },
+];
+
+function kindLabel(kind: CalendarItemKind): string {
+  if (kind === 'task') return t('create.kindTask');
+  if (kind === 'event') return t('create.kindEvent');
+  return t('create.kindBirthday');
+}
+
+function screenTitle(kind: CalendarItemKind, isEdit: boolean): string {
+  if (kind === 'task') return isEdit ? t('create.editTask') : t('create.newTask');
+  if (kind === 'event') return isEdit ? t('create.editEvent') : t('create.newEvent');
+  return isEdit ? t('create.editBirthday') : t('create.newBirthday');
+}
+
 export default function CreateTaskScreen() {
   const router = useRouter();
   const { taskId } = useLocalSearchParams<{ taskId?: string }>();
@@ -125,6 +143,7 @@ export default function CreateTaskScreen() {
         { value: 'daily' as RepeatOption, label: t('event.daily') },
         { value: 'weekly' as RepeatOption, label: t('event.weekly') },
         { value: 'monthly' as RepeatOption, label: t('event.monthly') },
+        { value: 'yearly' as RepeatOption, label: t('event.yearly') },
       ],
     []
   );
@@ -148,6 +167,7 @@ export default function CreateTaskScreen() {
   const defaultStart = new Date(`${selectedDate}T09:00:00`);
   const defaultEnd = addHours(defaultStart, 1);
 
+  const [kind, setKind] = useState<CalendarItemKind>(existingTask?.kind ?? 'task');
   const [title, setTitle] = useState(existingTask?.title ?? '');
   const [notes, setNotes] = useState(existingTask?.notes ?? '');
   const [allDay, setAllDay] = useState(existingTask?.all_day ?? false);
@@ -157,6 +177,9 @@ export default function CreateTaskScreen() {
   const [location, setLocation] = useState(existingTask?.location ?? '');
   const [color, setColor] = useState<TaskColor>(existingTask?.color ?? '#4A6FE3');
   const [notifyBefore, setNotifyBefore] = useState(existingTask?.notify_before_minutes ?? 10);
+  const [birthYear, setBirthYear] = useState(
+    existingTask?.birth_year != null ? String(existingTask.birth_year) : ''
+  );
   const [saving, setSaving] = useState(false);
 
   const [repeatModal, setRepeatModal] = useState(false);
@@ -166,6 +189,25 @@ export default function CreateTaskScreen() {
   const [pickerTarget, setPickerTarget] = useState<PickerWhich | null>(null);
   /** iOS only — working value while spinner moves */
   const [iosDraft, setIosDraft] = useState(() => new Date());
+
+  // Enforce kind-specific constraints when kind changes
+  useEffect(() => {
+    if (kind === 'birthday') {
+      const day = startOfDay(startDate);
+      setAllDay(true);
+      setStartDate(day);
+      setEndDate(day);
+      setRepeat('yearly');
+    } else if (kind === 'task') {
+      // Tasks always have a specific time — never all-day
+      setAllDay(false);
+      if (endDate.getTime() <= startDate.getTime()) {
+        setEndDate(addHours(startDate, 1));
+      }
+    }
+  // Only run when kind changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
 
   const baseForPicker = useCallback(() => {
     if (!pickerTarget) return new Date();
@@ -301,6 +343,8 @@ export default function CreateTaskScreen() {
       return;
     }
 
+    const parsedBirthYear = birthYear.trim() ? parseInt(birthYear.trim(), 10) : null;
+
     setSaving(true);
     const taskData: NewTask = {
       title: title.trim(),
@@ -314,6 +358,8 @@ export default function CreateTaskScreen() {
       tags: [],
       notify_before_minutes: notifyBefore,
       deleted_dates: isEdit && existingTask ? (existingTask.deleted_dates ?? []) : [],
+      kind,
+      birth_year: kind === 'birthday' && parsedBirthYear && !isNaN(parsedBirthYear) ? parsedBirthYear : null,
     };
 
     if (isEdit && taskId) {
@@ -329,6 +375,53 @@ export default function CreateTaskScreen() {
   const notifyLabel = NOTIFY_OPTIONS.find((n) => n.value === notifyBefore)?.label ?? t('event.notify10');
 
   const iconMuted = colors.iconMuted;
+  const isBirthday = kind === 'birthday';
+
+  // Inline styles for the kind segment (themed)
+  const segmentStyles = useMemo(() => StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 14,
+      backgroundColor: colors.inputBg,
+      padding: 4,
+      gap: 2,
+    },
+    tab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 9,
+      borderRadius: 11,
+      gap: 5,
+    },
+    tabActive: {
+      backgroundColor: colors.surfaceElevated,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.12,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    tabText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textSecondary,
+    },
+    tabTextActive: {
+      color: colors.textPrimary,
+      fontWeight: '600',
+    },
+    birthdayHint: {
+      marginHorizontal: 20,
+      marginBottom: 8,
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontStyle: 'italic',
+    },
+  }), [colors]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -336,12 +429,12 @@ export default function CreateTaskScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header — calendar-style */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.headerIconBtn} hitSlop={12}>
             <Ionicons name="close" size={26} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEdit ? t('event.edit') : t('event.new')}</Text>
+          <Text style={styles.headerTitle}>{screenTitle(kind, isEdit)}</Text>
           <TouchableOpacity
             onPress={handleSave}
             style={[styles.savePill, saving && styles.savePillDisabled]}
@@ -351,6 +444,36 @@ export default function CreateTaskScreen() {
             <Text style={styles.savePillText}>{t('common.save')}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Kind segment — only shown when creating new (not editing) */}
+        {!isEdit && (
+          <View style={segmentStyles.row}>
+            {KIND_OPTIONS.map(({ kind: k, icon }) => {
+              const active = kind === k;
+              return (
+                <TouchableOpacity
+                  key={k}
+                  style={[segmentStyles.tab, active && segmentStyles.tabActive]}
+                  onPress={() => setKind(k)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name={icon as any}
+                    size={16}
+                    color={active ? colors.accent : colors.iconMuted}
+                  />
+                  <Text style={[segmentStyles.tabText, active && segmentStyles.tabTextActive]}>
+                    {kindLabel(k)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {isBirthday && (
+          <Text style={segmentStyles.birthdayHint}>{t('create.birthdayHint')}</Text>
+        )}
 
         <ScrollView
           style={styles.scroll}
@@ -374,32 +497,27 @@ export default function CreateTaskScreen() {
 
             <View style={styles.sheetDivider} />
 
-            {/* Schedule */}
-            <View style={styles.sheetRow}>
-              <Ionicons name="sunny-outline" size={22} color={iconMuted} />
-              <Text style={styles.groupRowLabel}>{t('event.allDay')}</Text>
-              <Switch
-                value={allDay}
-                onValueChange={(v) => {
-                  if (v) {
-                    const day = startOfDay(startDate);
-                    setStartDate(day);
-                    setEndDate(day);
-                  } else {
-                    setEndDate((prev) =>
-                      prev.getTime() <= startDate.getTime() ? addHours(startDate, 1) : prev
-                    );
-                  }
-                  setAllDay(v);
-                }}
-                trackColor={{ false: colors.switchTrackOff, true: colors.accentMuted }}
-                thumbColor={colors.switchThumb}
-              />
-            </View>
+            {/* ── Schedule section ─────────────────────────────── */}
 
-            {!allDay && (
+            {/* Birthday: only a single date picker (no time, no end, no all-day toggle) */}
+            {isBirthday && (
+              <TouchableOpacity
+                style={styles.sheetRow}
+                activeOpacity={0.55}
+                onPress={() => setPickerTarget('allday-date')}
+              >
+                <Ionicons name="calendar-outline" size={22} color={iconMuted} />
+                <Text style={styles.groupRowLabel}>{t('event.date')}</Text>
+                <Text style={styles.groupRowValue} numberOfLines={1}>
+                  {formatDateRow(startDate)}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
+              </TouchableOpacity>
+            )}
+
+            {/* Task: always timed (no all-day toggle) */}
+            {kind === 'task' && (
               <>
-                <View style={styles.sheetDivider} />
                 <View style={styles.splitBlock}>
                   <Text style={styles.splitSectionTitle}>{t('event.start')}</Text>
                   <View style={styles.splitRow}>
@@ -444,49 +562,125 @@ export default function CreateTaskScreen() {
               </>
             )}
 
-            {allDay && (
+            {/* Event: all-day toggle + conditional start/end or date picker */}
+            {kind === 'event' && (
+              <>
+                <View style={styles.sheetRow}>
+                  <Ionicons name="sunny-outline" size={22} color={iconMuted} />
+                  <Text style={styles.groupRowLabel}>{t('event.allDay')}</Text>
+                  <Switch
+                    value={allDay}
+                    onValueChange={(v) => {
+                      if (v) {
+                        const day = startOfDay(startDate);
+                        setStartDate(day);
+                        setEndDate(day);
+                      } else {
+                        setEndDate((prev) =>
+                          prev.getTime() <= startDate.getTime() ? addHours(startDate, 1) : prev
+                        );
+                      }
+                      setAllDay(v);
+                    }}
+                    trackColor={{ false: colors.switchTrackOff, true: colors.accentMuted }}
+                    thumbColor={colors.switchThumb}
+                  />
+                </View>
+
+                {!allDay && (
+                  <>
+                    <View style={styles.sheetDivider} />
+                    <View style={styles.splitBlock}>
+                      <Text style={styles.splitSectionTitle}>{t('event.start')}</Text>
+                      <View style={styles.splitRow}>
+                        <TouchableOpacity
+                          style={styles.splitLeft}
+                          activeOpacity={0.55}
+                          onPress={() => setPickerTarget('start-date')}
+                        >
+                          <Text style={styles.splitDateText}>{formatDateRow(startDate)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.splitRight}
+                          activeOpacity={0.55}
+                          onPress={() => setPickerTarget('start-time')}
+                        >
+                          <Text style={styles.splitTimeText}>{formatTimeRow(startDate, is24Hour)}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.sheetDivider} />
+
+                    <View style={styles.splitBlock}>
+                      <Text style={styles.splitSectionTitle}>{t('event.end')}</Text>
+                      <View style={styles.splitRow}>
+                        <TouchableOpacity
+                          style={styles.splitLeft}
+                          activeOpacity={0.55}
+                          onPress={() => setPickerTarget('end-date')}
+                        >
+                          <Text style={styles.splitDateText}>{formatDateRow(endDate)}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.splitRight}
+                          activeOpacity={0.55}
+                          onPress={() => setPickerTarget('end-time')}
+                        >
+                          <Text style={styles.splitTimeText}>{formatTimeRow(endDate, is24Hour)}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                {allDay && (
+                  <>
+                    <View style={styles.sheetDivider} />
+                    <TouchableOpacity
+                      style={styles.sheetRow}
+                      activeOpacity={0.55}
+                      onPress={() => setPickerTarget('allday-date')}
+                    >
+                      <Ionicons name="calendar-outline" size={22} color={iconMuted} />
+                      <Text style={styles.groupRowLabel}>{t('event.date')}</Text>
+                      <Text style={styles.groupRowValue} numberOfLines={1}>
+                        {formatDateRow(startDate)}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Repeat + Location — hidden for birthdays */}
+            {!isBirthday && (
               <>
                 <View style={styles.sheetDivider} />
                 <TouchableOpacity
                   style={styles.sheetRow}
+                  onPress={() => setRepeatModal(true)}
                   activeOpacity={0.55}
-                  onPress={() => setPickerTarget('allday-date')}
                 >
-                  <Ionicons name="calendar-outline" size={22} color={iconMuted} />
-                  <Text style={styles.groupRowLabel}>{t('event.date')}</Text>
-                  <Text style={styles.groupRowValue} numberOfLines={1}>
-                    {formatDateRow(startDate)}
-                  </Text>
+                  <Ionicons name="repeat-outline" size={22} color={iconMuted} />
+                  <Text style={styles.groupRowLabelFlex}>{t('event.repeat')}</Text>
+                  <Text style={styles.groupRowValueMuted}>{repeatLabel}</Text>
                   <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
                 </TouchableOpacity>
+                <View style={styles.sheetDivider} />
+                <View style={styles.sheetRow}>
+                  <Ionicons name="location-outline" size={22} color={iconMuted} />
+                  <TextInput
+                    style={styles.locationInput}
+                    placeholder={t('event.locationPlaceholder')}
+                    placeholderTextColor={colors.placeholder}
+                    value={location}
+                    onChangeText={setLocation}
+                  />
+                </View>
               </>
             )}
-
-            <View style={styles.sheetDivider} />
-
-            <TouchableOpacity
-              style={styles.sheetRow}
-              onPress={() => setRepeatModal(true)}
-              activeOpacity={0.55}
-            >
-              <Ionicons name="repeat-outline" size={22} color={iconMuted} />
-              <Text style={styles.groupRowLabelFlex}>{t('event.repeat')}</Text>
-              <Text style={styles.groupRowValueMuted}>{repeatLabel}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.chevron} />
-            </TouchableOpacity>
-
-            <View style={styles.sheetDivider} />
-
-            <View style={styles.sheetRow}>
-              <Ionicons name="location-outline" size={22} color={iconMuted} />
-              <TextInput
-                style={styles.locationInput}
-                placeholder={t('event.locationPlaceholder')}
-                placeholderTextColor={colors.placeholder}
-                value={location}
-                onChangeText={setLocation}
-              />
-            </View>
 
             <View style={styles.sheetDivider} />
 
@@ -568,7 +762,7 @@ export default function CreateTaskScreen() {
         colors={colors}
       />
 
-      {/* Android: native Material date/time dialogs (clock for time) */}
+      {/* Android: native Material date/time dialogs */}
       {Platform.OS === 'android' && pickerTarget && (
         <DateTimePicker
           value={baseForPicker()}

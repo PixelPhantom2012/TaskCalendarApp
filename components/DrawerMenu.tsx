@@ -9,6 +9,7 @@ import {
   Pressable,
   Image,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTaskStore } from '@/lib/store';
@@ -40,10 +41,22 @@ function createStyles(c: AppThemeColors) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.borderMuted,
     },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    headerTitleWrap: {
+      flex: 1,
+      marginRight: 12,
+    },
     headerTitle: {
       fontSize: 20,
       fontWeight: '500',
       color: c.textPrimary,
+    },
+    settingsBtn: {
+      padding: 4,
     },
     section: {
       paddingVertical: 8,
@@ -127,10 +140,16 @@ function createStyles(c: AppThemeColors) {
 }
 
 export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
+  const router = useRouter();
   const { colors } = useAppTheme();
   const { user } = useTaskStore();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
+
+  function goToSettings() {
+    onClose();
+    router.push('/(app)/settings');
+  }
 
   if (!visible) return null;
 
@@ -140,7 +159,22 @@ export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
         {/* Drawer Content */}
         <View style={[styles.drawer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>{t('auth.appName')}</Text>
+            <View style={styles.headerRow}>
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                  {t('auth.appName')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.settingsBtn}
+                onPress={goToSettings}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.title')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
           </View>
           
           <ScrollView showsVerticalScrollIndicator={false}>

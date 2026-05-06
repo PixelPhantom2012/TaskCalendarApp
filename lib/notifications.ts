@@ -7,6 +7,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 import type { Task } from './types';
+import { getNotificationsEnabled } from './notificationPrefs';
 
 /** True when native notification module cannot be used (Expo Go / Android store client). */
 export const isNotificationsDisabledInCurrentRuntime =
@@ -34,7 +35,26 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 export async function scheduleTaskNotification(task: Task): Promise<string | null> {
   const mod = await loadImpl();
   if (!mod) return null;
-  return mod.scheduleTaskNotification(task);
+  const enabled = await getNotificationsEnabled();
+  if (!enabled) {
+    await mod.cancelScheduledNotificationsForTask(task.id);
+    return null;
+  }
+  return mod.scheduleTaskNotificationsAfterSave(task);
+}
+
+export async function cancelScheduledNotificationsForTask(taskId: string): Promise<void> {
+  const mod = await loadImpl();
+  if (!mod) return;
+  await mod.cancelScheduledNotificationsForTask(taskId);
+}
+
+/** Reschedule all local reminders for the given tasks (respects persisted notification toggle). */
+export async function rescheduleAllNotificationsForTasks(tasks: Task[]): Promise<void> {
+  const mod = await loadImpl();
+  if (!mod) return;
+  const enabled = await getNotificationsEnabled();
+  await mod.rescheduleAllNotificationsForTasks(tasks, enabled);
 }
 
 export async function cancelTaskNotification(notificationId: string): Promise<void> {

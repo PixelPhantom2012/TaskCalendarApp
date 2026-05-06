@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +17,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTaskStore } from '@/lib/store';
-import { isNotificationsDisabledInCurrentRuntime } from '@/lib/notifications';
+import {
+  cancelAllNotifications,
+  isNotificationsDisabledInCurrentRuntime,
+  requestNotificationPermissions,
+  rescheduleAllNotificationsForTasks,
+} from '@/lib/notifications';
+import {
+  getNotificationsEnabled as loadNotificationsPref,
+  setNotificationsEnabled as saveNotificationsPref,
+} from '@/lib/notificationPrefs';
 import { t } from '@/lib/i18n';
 import { getAppLocale, setAppLocale } from '@/lib/i18n/locale';
 import { useAppTheme } from '@/lib/theme';
@@ -233,10 +242,29 @@ export default function SettingsScreen() {
   const [showLangSheet, setShowLangSheet] = useState(false);
   const [showThemeSheet, setShowThemeSheet] = useState(false);
 
+  useEffect(() => {
+    void loadNotificationsPref().then(setNotificationsEnabled);
+  }, []);
+
+  const onNotificationsToggle = (value: boolean) => {
+    void (async () => {
+      setNotificationsEnabled(value);
+      await saveNotificationsPref(value);
+      if (isNotificationsDisabledInCurrentRuntime) return;
+      if (!value) {
+        await cancelAllNotifications();
+        return;
+      }
+      await requestNotificationPermissions();
+      await rescheduleAllNotificationsForTasks(useTaskStore.getState().tasks);
+    })();
+  };
+
   const doSignOut = () => {
     void (async () => {
       setSigningOut(true);
       try {
+        await cancelAllNotifications();
         await supabase.auth.signOut();
         setUser(null);
         useTaskStore.setState({ tasks: [] });
@@ -317,7 +345,7 @@ export default function SettingsScreen() {
           right={
             <Switch
               value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
+              onValueChange={onNotificationsToggle}
               disabled={isNotificationsDisabledInCurrentRuntime}
               trackColor={{ false: colors.switchTrackOff, true: colors.switchTrackOn }}
               thumbColor={colors.switchThumb}

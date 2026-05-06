@@ -27,6 +27,7 @@
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
       ]
@@ -49,6 +50,12 @@
     "experiments": {
       "typedRoutes": true
     },
-    "scheme": "new-android"
+    "scheme": "new-android",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d3004604-0076-43ef-b0b8-1f6f7ca44fc6"
+      }
+    }
   }
 }

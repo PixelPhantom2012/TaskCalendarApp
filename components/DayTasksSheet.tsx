@@ -142,14 +142,21 @@ export default function DayTasksSheet({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {tasks.map((task) => (
-                <EventCard
-                  key={`${task.id}:${dateString}`}
-                  task={task}
-                  onPress={() => onEditTask(task)}
-                  onDelete={() => onDeleteTask(task)}
-                />
-              ))}
+              {/* All-day items (events/birthdays) first, then timed items by start */}
+              {[...tasks]
+                .sort((a, b) => {
+                  if (a.all_day && !b.all_day) return -1;
+                  if (!a.all_day && b.all_day) return 1;
+                  return new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
+                })
+                .map((task) => (
+                  <EventCard
+                    key={`${task.id}:${dateString}`}
+                    task={task}
+                    onPress={() => onEditTask(task)}
+                    onDelete={() => onDeleteTask(task)}
+                  />
+                ))}
             </ScrollView>
           )}
         </View>

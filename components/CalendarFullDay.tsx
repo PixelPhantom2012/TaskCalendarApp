@@ -187,13 +187,16 @@ export default function CalendarFullDay({
     <>
       <View style={styles.dayRow}>{dayMarkup}</View>
       <View style={styles.chips}>
-        {visible.map((task) => (
-          <View key={task.id} style={[styles.chip, { backgroundColor: task.color }]}>
-            <Text allowFontScaling={false} style={styles.chipText} numberOfLines={1}>
-              {task.title}
-            </Text>
-          </View>
-        ))}
+        {visible.map((task) => {
+          const prefix = task.kind === 'birthday' ? '🎂 ' : task.kind === 'event' ? '📅 ' : '';
+          return (
+            <View key={task.id} style={[styles.chip, { backgroundColor: task.color }]}>
+              <Text allowFontScaling={false} style={styles.chipText} numberOfLines={1}>
+                {prefix}{task.title}
+              </Text>
+            </View>
+          );
+        })}
         {extra > 0 && (
           <Text
             allowFontScaling={false}
