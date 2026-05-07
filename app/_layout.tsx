@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { supabase } from '@/lib/supabase';
+import { Text, View } from 'react-native';
+import { getSupabaseConfigError, supabase } from '@/lib/supabase';
 import { useTaskStore } from '@/lib/store';
 import { requestNotificationPermissions } from '@/lib/notifications';
 import { initAppLocale } from '@/lib/i18n/locale';
 import { ThemeProvider, useAppTheme } from '@/lib/theme';
+
+void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   return (
@@ -19,31 +23,13 @@ export default function RootLayout() {
 function RootLayoutInner() {
   const setUser = useTaskStore((s) => s.setUser);
   const [ready, setReady] = useState(false);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(() =>
+    getSupabaseConfigError()
+  );
   const { colors } = useAppTheme();
 
   useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      await initAppLocale();
-      if (cancelled) return;
-      requestNotificationPermissions();
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (cancelled) return;
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email ?? '',
-          full_name: session.user.user_metadata?.full_name ?? null,
-          avatar_url: session.user.user_metadata?.avatar_url ?? null,
-        });
-      }
-      setReady(true);
-    })();
-
+    const configError = getSupabaseConfigError();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -59,13 +45,65 @@ function RootLayoutInner() {
       }
     });
 
+    let cancelled = false;
+
+    async function bootstrap() {
+      try {
+        if (configError) {
+          return;
+        }
+        await initAppLocale();
+        if (cancelled) return;
+        requestNotificationPermissions();
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            email: session.user.email ?? '',
+            full_name: session.user.user_metadata?.full_name ?? null,
+            avatar_url: session.user.user_metadata?.avatar_url ?? null,
+          });
+        }
+      } catch (e) {
+        if (!cancelled) {
+          const message = e instanceof Error ? e.message : String(e);
+          setBootstrapError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setReady(true);
+          await SplashScreen.hideAsync().catch(() => undefined);
+        }
+      }
+    }
+
+    void bootstrap();
+
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
   }, [setUser]);
 
-  if (!ready) return null;
+  if (!ready) {
+    return null;
+  }
+
+  if (bootstrapError || getSupabaseConfigError()) {
+    const message = bootstrapError ?? getSupabaseConfigError() ?? '';
+    return (
+      <View style={{ flex: 1, padding: 24, justifyContent: 'center', backgroundColor: colors.bg }}>
+        <Text style={{ color: colors.textPrimary, marginBottom: 12, fontSize: 17, fontWeight: '700' }}>
+          Configuration error
+        </Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 20 }}>{message}</Text>
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
