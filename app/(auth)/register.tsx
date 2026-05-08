@@ -173,7 +173,7 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -184,11 +184,18 @@ export default function RegisterScreen() {
 
     if (error) {
       Alert.alert(t('register.registerFailed'), error.message);
-    } else {
-      Alert.alert(t('register.checkEmail'), t('register.checkEmailMsg'), [
-        { text: t('common.ok'), onPress: () => router.replace('/(auth)/login') },
-      ]);
+      return;
     }
+
+    // Session is returned immediately when "Confirm email" is off in Supabase.
+    if (data.session) {
+      router.replace('/(app)');
+      return;
+    }
+
+    Alert.alert(t('register.checkEmail'), t('register.checkEmailMsg'), [
+      { text: t('common.ok'), onPress: () => router.replace('/(auth)/login') },
+    ]);
   };
 
   return (
