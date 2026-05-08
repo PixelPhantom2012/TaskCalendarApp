@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,14 +12,20 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import { format, parse, addMonths } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { formatLocalized } from '@/lib/i18n/dates';
+import {
+  getTimelineDays,
+  loadCalendarViewMode,
+  toolbarTitleForTimeline,
+} from '@/lib/calendarViewMode';
 import { useTaskStore } from '@/lib/store';
 import type { Task } from '@/lib/types';
 import RecurringDeleteSheet from '@/components/RecurringDeleteSheet';
 import CalendarFullDay from '@/components/CalendarFullDay';
 import DayTasksSheet from '@/components/DayTasksSheet';
 import DrawerMenu from '@/components/DrawerMenu';
+import TimelineView, { type TimelineViewHandle } from '@/components/timeline/TimelineView';
 import { t } from '@/lib/i18n';
 import { useAppTheme } from '@/lib/theme';
 import type { AppThemeColors } from '@/lib/theme';
@@ -167,15 +173,31 @@ export default function HomeScreen() {
     tasks,
     selectedDate,
     calendarMonthKey,
+    calendarViewMode,
     loading,
     setSelectedDate,
     setCalendarMonthKey,
+    setCalendarViewMode,
     fetchTasks,
     deleteTask,
     deleteTaskOccurrence,
     getTasksForDate,
     getMarkedDates,
   } = useTaskStore();
+
+  const timelineRef = useRef<TimelineViewHandle>(null);
+
+  useEffect(() => {
+    void loadCalendarViewMode().then((mode) => {
+      if (mode) setCalendarViewMode(mode);
+    });
+  }, [setCalendarViewMode]);
+
+  useEffect(() => {
+    if (calendarViewMode === 'month') return;
+    const timer = setTimeout(() => timelineRef.current?.scrollToApproximatePresent(), 200);
+    return () => clearTimeout(timer);
+  }, [calendarViewMode]);
 
   // Compute tasks for every day in the current visible month.
   // Passed via Context → cells always update when tasks change, bypassing React.memo in the library.
@@ -190,6 +212,19 @@ export default function HomeScreen() {
     }
     return map;
   }, [tasks, calendarMonthKey]);
+
+  const timelineDaysLogical = useMemo(() => {
+    if (calendarViewMode === 'month') return [];
+    return getTimelineDays(calendarViewMode, selectedDate);
+  }, [calendarViewMode, selectedDate]);
+
+  const timelineTasksByDay = useMemo(() => {
+    const m: Record<string, Task[]> = {};
+    for (const d of timelineDaysLogical) {
+      m[d] = getTasksForDate(d);
+    }
+    return m;
+  }, [timelineDaysLogical, getTasksForDate, tasks]);
 
   const markedDates = getMarkedDates();
   const sheetTasks = sheetDate ? getTasksForDate(sheetDate) : [];
@@ -219,7 +254,10 @@ export default function HomeScreen() {
     if (todayMonth !== calendarMonthKey) {
       setCalendarMonthKey(todayMonth);
     }
-  }, [calendarMonthKey, setSelectedDate, setCalendarMonthKey]);
+    if (calendarViewMode !== 'month') {
+      requestAnimationFrame(() => timelineRef.current?.scrollToApproximatePresent());
+    }
+  }, [calendarMonthKey, calendarViewMode, setSelectedDate, setCalendarMonthKey]);
 
   const onDayPress = useCallback(
     (day: { dateString: string }) => {
@@ -238,6 +276,26 @@ export default function HomeScreen() {
     }
   }, [calendarMonthKey]);
 
+  const toolbarMainTitle = useMemo(() => {
+    if (calendarViewMode === 'month') return displayMonthYear;
+    return toolbarTitleForTimeline(calendarViewMode, selectedDate, formatLocalized);
+  }, [calendarViewMode, selectedDate, displayMonthYear]);
+
+  const onTimelinePickDay = useCallback(
+    (dateStr: string) => {
+      setSelectedDate(dateStr);
+      setCalendarMonthKey(dateStr.slice(0, 7));
+    },
+    [setSelectedDate, setCalendarMonthKey]
+  );
+
+  const onTimelineTaskPress = useCallback(
+    (task: Task) => {
+      router.push({ pathname: '/(app)/create', params: { taskId: task.id } });
+    },
+    [router]
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {/* ── Toolbar ── */}
@@ -250,7 +308,7 @@ export default function HomeScreen() {
           <Ionicons name="menu" size={22} color={colors.icon} />
         </TouchableOpacity>
 
-        <Text style={styles.monthTitle}>{displayMonthYear}</Text>
+        <Text style={styles.monthTitle}>{toolbarMainTitle}</Text>
 
         <View style={styles.spacer} />
 
@@ -286,7 +344,8 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Full-month calendar ── */}
+      {/* ── Month grid or timeline ── */}
+      {calendarViewMode === 'month' ? (
       <TasksByDateContext.Provider value={tasksByDate}>
         <View
           style={styles.calendarWrap}
@@ -314,6 +373,20 @@ export default function HomeScreen() {
           )}
         </View>
       </TasksByDateContext.Provider>
+      ) : (
+        <View style={styles.calendarWrap}>
+          <TimelineView
+            ref={timelineRef}
+            daysLogical={timelineDaysLogical}
+            tasksByDay={timelineTasksByDay}
+            selectedDate={selectedDate}
+            colors={colors}
+            isDarkMode={isDarkMode}
+            onPickDay={onTimelinePickDay}
+            onPressTask={onTimelineTaskPress}
+          />
+        </View>
+      )}
 
       {/* ── FAB ── */}
       <TouchableOpacity
@@ -353,10 +426,12 @@ export default function HomeScreen() {
         }}
       />
       
-      <DrawerMenu 
-        visible={isDrawerOpen} 
-        onClose={() => setIsDrawerOpen(false)} 
-        onRefresh={() => void fetchTasks()} 
+      <DrawerMenu
+        visible={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onRefresh={() => void fetchTasks()}
+        calendarViewMode={calendarViewMode}
+        onSelectViewMode={setCalendarViewMode}
       />
     </SafeAreaView>
   );

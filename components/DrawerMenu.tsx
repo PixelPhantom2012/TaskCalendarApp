@@ -16,11 +16,14 @@ import { useTaskStore } from '@/lib/store';
 import { useAppTheme } from '@/lib/theme';
 import type { AppThemeColors } from '@/lib/theme';
 import { t } from '@/lib/i18n';
+import type { CalendarViewMode } from '@/lib/calendarViewMode';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   onRefresh: () => void;
+  calendarViewMode: CalendarViewMode;
+  onSelectViewMode: (mode: CalendarViewMode) => void;
 };
 
 function createStyles(c: AppThemeColors) {
@@ -70,10 +73,9 @@ function createStyles(c: AppThemeColors) {
       paddingVertical: 14,
     },
     itemActive: {
-      backgroundColor: c.accent + '1A', // Light accent background for active item
-      borderTopRightRadius: 24,
-      borderBottomRightRadius: 24,
-      marginRight: 8,
+      backgroundColor: c.accent + '1A',
+      marginHorizontal: 8,
+      borderRadius: 24,
     },
     icon: {
       width: 24,
@@ -139,7 +141,13 @@ function createStyles(c: AppThemeColors) {
   });
 }
 
-export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
+export default function DrawerMenu({
+  visible,
+  onClose,
+  onRefresh,
+  calendarViewMode,
+  onSelectViewMode,
+}: Props) {
   const router = useRouter();
   const { colors } = useAppTheme();
   const { user } = useTaskStore();
@@ -150,6 +158,13 @@ export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
     onClose();
     router.push('/(app)/settings');
   }
+
+  function pick(mode: CalendarViewMode) {
+    onSelectViewMode(mode);
+    onClose();
+  }
+
+  const monthLike = calendarViewMode === 'month';
 
   if (!visible) return null;
 
@@ -179,38 +194,100 @@ export default function DrawerMenu({ visible, onClose, onRefresh }: Props) {
           
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.section}>
-              <TouchableOpacity style={styles.item} onPress={onClose}>
-                <Ionicons name="list" size={24} color={colors.iconMuted} style={styles.icon} />
-                <Text style={styles.itemText}>Schedule</Text>
+              <TouchableOpacity
+                style={[styles.item, monthLike ? styles.itemActive : undefined]}
+                onPress={() => pick('month')}
+              >
+                <Ionicons
+                  name="list"
+                  size={24}
+                  color={monthLike ? colors.accent : colors.iconMuted}
+                  style={styles.icon}
+                />
+                <Text style={[styles.itemText, monthLike ? styles.itemTextActive : undefined]}>
+                  {t('drawer.schedule')}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.item} onPress={onClose}>
-                <Ionicons name="calendar-outline" size={24} color={colors.iconMuted} style={styles.icon} />
-                <Text style={styles.itemText}>Day</Text>
+              <TouchableOpacity
+                style={[styles.item, calendarViewMode === 'day' ? styles.itemActive : undefined]}
+                onPress={() => pick('day')}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={24}
+                  color={calendarViewMode === 'day' ? colors.accent : colors.iconMuted}
+                  style={styles.icon}
+                />
+                <Text
+                  style={[
+                    styles.itemText,
+                    calendarViewMode === 'day' ? styles.itemTextActive : undefined,
+                  ]}
+                >
+                  {t('drawer.day')}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.item} onPress={onClose}>
-                <Ionicons name="calendar-clear-outline" size={24} color={colors.iconMuted} style={styles.icon} />
-                <Text style={styles.itemText}>3 days</Text>
+              <TouchableOpacity
+                style={[styles.item, calendarViewMode === 'threeDay' ? styles.itemActive : undefined]}
+                onPress={() => pick('threeDay')}
+              >
+                <Ionicons
+                  name="calendar-clear-outline"
+                  size={24}
+                  color={calendarViewMode === 'threeDay' ? colors.accent : colors.iconMuted}
+                  style={styles.icon}
+                />
+                <Text
+                  style={[
+                    styles.itemText,
+                    calendarViewMode === 'threeDay' ? styles.itemTextActive : undefined,
+                  ]}
+                >
+                  {t('drawer.threeDays')}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.item} onPress={onClose}>
-                <Ionicons name="apps-outline" size={24} color={colors.iconMuted} style={styles.icon} />
-                <Text style={styles.itemText}>Week</Text>
+              <TouchableOpacity
+                style={[styles.item, calendarViewMode === 'week' ? styles.itemActive : undefined]}
+                onPress={() => pick('week')}
+              >
+                <Ionicons
+                  name="apps-outline"
+                  size={24}
+                  color={calendarViewMode === 'week' ? colors.accent : colors.iconMuted}
+                  style={styles.icon}
+                />
+                <Text
+                  style={[styles.itemText, calendarViewMode === 'week' ? styles.itemTextActive : undefined]}
+                >
+                  {t('drawer.week')}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.item, styles.itemActive]} onPress={onClose}>
-                <Ionicons name="grid" size={24} color={colors.accent} style={styles.icon} />
-                <Text style={[styles.itemText, styles.itemTextActive]}>Month</Text>
+              <TouchableOpacity
+                style={[styles.item, monthLike ? styles.itemActive : undefined]}
+                onPress={() => pick('month')}
+              >
+                <Ionicons
+                  name="grid"
+                  size={24}
+                  color={monthLike ? colors.accent : colors.iconMuted}
+                  style={styles.icon}
+                />
+                <Text style={[styles.itemText, monthLike ? styles.itemTextActive : undefined]}>
+                  {t('drawer.month')}
+                </Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
-              <TouchableOpacity 
-                style={styles.item} 
+              <TouchableOpacity
+                style={styles.item}
                 onPress={() => {
                   onRefresh();
                   onClose();
                 }}
               >
                 <Ionicons name="refresh" size={24} color={colors.iconMuted} style={styles.icon} />
-                <Text style={styles.itemText}>Refresh</Text>
+                <Text style={styles.itemText}>{t('drawer.refresh')}</Text>
               </TouchableOpacity>
             </View>
 

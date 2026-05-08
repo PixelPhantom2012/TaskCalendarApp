@@ -93,6 +93,14 @@ export const en = {
     fillAll: 'Please fill in all fields',
     loginFailed: 'Login failed',
   },
+  drawer: {
+    schedule: 'Schedule',
+    day: 'Day',
+    threeDays: '3 days',
+    week: 'Week',
+    month: 'Month',
+    refresh: 'Refresh',
+  },
   register: {
     createTitle: 'Create Account',
     subtitle: 'Start organizing your tasks today',

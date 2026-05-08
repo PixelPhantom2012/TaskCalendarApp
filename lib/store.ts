@@ -3,6 +3,8 @@ import { supabase } from './supabase';
 import type { Task, NewTask, UserProfile, RepeatOption, CalendarItemKind } from './types';
 import { cancelScheduledNotificationsForTask, rescheduleAllNotificationsForTasks, scheduleTaskNotification } from './notifications';
 import { format } from 'date-fns';
+import type { CalendarViewMode } from './calendarViewMode';
+import { saveCalendarViewMode } from './calendarViewMode';
 import { taskOccursOnVisibleDate, projectTaskToOccurrence } from './recurrence';
 
 function normalizeTaskRow(row: Task): Task {
@@ -26,12 +28,15 @@ interface TaskStore {
   selectedDate: string;
   /** yyyy-MM visible on calendar grid (updates when navigating months) */
   calendarMonthKey: string;
+  /** Month grid vs Day / Week / 3-days timeline — persisted externally via save helper */
+  calendarViewMode: CalendarViewMode;
   loading: boolean;
   user: UserProfile | null;
 
   setUser: (user: UserProfile | null) => void;
   setSelectedDate: (date: string) => void;
   setCalendarMonthKey: (monthKey: string) => void;
+  setCalendarViewMode: (mode: CalendarViewMode) => void;
   fetchTasks: () => Promise<void>;
   addTask: (task: NewTask) => Promise<void>;
   updateTask: (id: string, updates: Partial<NewTask>) => Promise<void>;
@@ -47,6 +52,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   selectedDate: format(new Date(), 'yyyy-MM-dd'),
   calendarMonthKey: format(new Date(), 'yyyy-MM'),
+  calendarViewMode: 'month',
   loading: false,
   user: null,
 
@@ -55,6 +61,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   setSelectedDate: (date) => set({ selectedDate: date }),
 
   setCalendarMonthKey: (monthKey) => set({ calendarMonthKey: monthKey }),
+
+  setCalendarViewMode: (mode) => {
+    set({ calendarViewMode: mode });
+    void saveCalendarViewMode(mode);
+  },
 
   fetchTasks: async () => {
     set({ loading: true });

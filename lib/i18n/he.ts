@@ -94,6 +94,14 @@ export const he = {
     fillAll: 'נא למלא את כל השדות',
     loginFailed: 'ההתחברות נכשלה',
   },
+  drawer: {
+    schedule: 'לוח זמנים',
+    day: 'יום',
+    threeDays: '3 ימים',
+    week: 'שבוע',
+    month: 'חודש',
+    refresh: 'רענון',
+  },
   register: {
     createTitle: 'יצירת חשבון',
     subtitle: 'התחלו לארגן משימות היום',
